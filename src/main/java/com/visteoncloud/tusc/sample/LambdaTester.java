@@ -17,17 +17,19 @@ public class LambdaTester {
 		JSONObject requestBody = new JSONObject();
 		requestBody.put("foo", "bar");
 		requestBody.put("baz", 42);
-		
+		requestBody.put("one",1);
 		// create request
 		APIGatewayProxyRequestEvent request = new APIGatewayProxyRequestEvent();
 		request.setHttpMethod("get");
 		request.setBody(requestBody.toString());
 		request.setPath("/path");
 		
+		
 		// create handler
 		LambdaHandler handler = new LambdaHandler();
 		APIGatewayProxyResponseEvent response = handler.handleRequest(request, new TestLambdaContext());
 
+	    
 	}
 
 }
