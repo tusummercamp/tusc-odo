@@ -14,7 +14,7 @@ public class LambdaTester {
 	public static void main(String[] args) {
 		
 		// create request body
-		JSONObject requestBody = new JSONObject();
+		JSONObject requestBody = new JSONObject	();
 		requestBody.put("foo", "bar");
 		requestBody.put("baz", 42);
 		requestBody.put("one",1);
@@ -23,12 +23,10 @@ public class LambdaTester {
 		request.setHttpMethod("get");
 		request.setBody(requestBody.toString());
 		request.setPath("/path");
-		
-		
 		// create handler
 		LambdaHandler handler = new LambdaHandler();
 		APIGatewayProxyResponseEvent response = handler.handleRequest(request, new TestLambdaContext());
-
+        
 	    
 	}
 
