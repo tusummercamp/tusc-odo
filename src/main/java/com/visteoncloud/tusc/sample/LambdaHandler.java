@@ -1,12 +1,12 @@
 package com.visteoncloud.tusc.sample;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -15,99 +15,121 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 
-
-import sun.net.www.protocol.http.HttpURLConnection;
-
 public class LambdaHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent>  {
+	
+	final static String USER_ID = "Demo user";
+	static DBClient dbClient = null;
 
 	public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
 		
 		// get logger
 		LambdaLogger logger = context.getLogger();
 		
-		// get body
-		JSONObject body = new JSONObject(input.getBody());
-		String foo = body.getString("foo");
-		Integer baz = body.getInt("baz");
+		// create DB client
+		if (dbClient == null) {
+			dbClient = new DBClient();
+		}
 		
-		// log body
-		logger.log("Received request");
-		logger.log("Method " + input.getHttpMethod());
-		logger.log("Path " + input.getPath());
-		logger.log("Raw body " + input.getBody());
-		logger.log("foo " + foo);
-		logger.log("baz " + baz);
+		logger.log("Received request with method " + input.getHttpMethod());
+		logger.log(input.getBody());
 		
-		// TODO: handle request data here
+		// handle request
+		APIGatewayProxyResponseEvent response;
 		
-		JSONObject responseBody = new JSONObject();
-		responseBody.put("status", "ok");
+		String method = input.getHttpMethod();
+		if (method.equalsIgnoreCase("get")) {
+			
+			response = handleGet(input.getQueryStringParameters());
+			
+		} else if (method.equalsIgnoreCase("post")) {
+			
+			response = handlePost(input.getBody());
+			
+		} else {
+			response = new APIGatewayProxyResponseEvent();
+			response.setStatusCode(400);
+			JSONObject responseBody = new JSONObject();
+			responseBody.put("status", "error");
+			responseBody.put("errorMessage", "Unsupported method: " + method);
+			response.setBody(responseBody.toString());
+		}
 		
-		// create and return response
-		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
-		response.setStatusCode(200);
-		response.setBody(responseBody.toString());
 		return response;
 	}
 	
-	public static void GetRequest() throws IOException{
-		URL getReqestURL = new URL ("https://g9eyv3jby5.execute-api.us-east-1.amazonaws.com/Prod/data");
-		String readLine = null;
-		HttpURLConnection getConnection = (HttpURLConnection) getReqestURL.openConnection();
-		getConnection.setRequestMethod("GET");
-		getConnection.setRequestProperty("distance", "testParameters");
-		int responseCode = getConnection.getResponseCode();
-		System.out.println("Get response code : " + responseCode);
-		System.out.println("Get response message : " + getConnection.getResponseMessage());
-		if (responseCode == HttpURLConnection.HTTP_OK) {
-			BufferedReader in = new BufferedReader( new InputStreamReader(getConnection.getInputStream()));
-			StringBuffer response = new StringBuffer();
-			while ((readLine = in.readLine()) != null) {
-				response.append(readLine);
+
+	private APIGatewayProxyResponseEvent handlePost(String body) {
+		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
+		JSONObject responseBody = new JSONObject();
+		
+		try {
+			JSONArray requestBody = new JSONArray(body);
+			HashMap<BigInteger, Float> dbData = new HashMap<BigInteger, Float>();
+			
+			for (int i = 0; i< requestBody.length(); i++) {
+				BigInteger time = requestBody.getJSONObject(i).getBigInteger("time");
+				Float value = requestBody.getJSONObject(i).getFloat("value");
+				dbData.put(time, value);
 			}
-			in.close();
-			System.out.println("Response: " + response.toString());
+			dbClient.createItems(USER_ID, dbData);
+			
+			responseBody.put("status", "ok");
+			responseBody.put("data", dbData);
+			
+			response.setStatusCode(200);
+			response.setBody(responseBody.toString(2));
+			
 		}
-		else {
-			System.out.println("ERROR");
-			System.out.println("Code : " + getConnection.getResponseCode());
+		    catch(Exception e) {
+		    	
+		    	responseBody.put("status", "error");
+		    	responseBody.put("errorMessage", e.toString());
+		    	
+		    	response.setStatusCode(400);
+		    	response.setBody(responseBody.toString());
+		    }
+		return response;
+	}
+	
+	private APIGatewayProxyResponseEvent handleGet(Map<String,String> queryStringParameters){
+		APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
+		JSONObject responseBody = new JSONObject();
+
+		try {
+
+			BigInteger from = new BigInteger(queryStringParameters.get("from"));
+			BigInteger to = new BigInteger(queryStringParameters.get("to"));
+
+			JSONArray data = new JSONArray();
+			HashMap<BigInteger, Float> result = dbClient.getItems(USER_ID, from, to);
+			Iterator<Entry<BigInteger, Float>> it = result.entrySet().iterator();
+			while (it.hasNext()) {
+				Entry<BigInteger, Float> entry = it.next();
+				JSONObject item = new JSONObject();
+				item.put("time", entry.getKey());
+				item.put("value", entry.getValue());
+				data.put(item);
+			}
+			
+			responseBody.put("status", "ok");
+			responseBody.put("data", data);
+			
+			response.setStatusCode(200);
+			response.setBody(responseBody.toString(2));
+
+		} catch (Exception e) {
+
+			responseBody.put("status", "error");
+			responseBody.put("errorMessage", e.toString());
+			
+			response.setStatusCode(400);
+			response.setBody(responseBody.toString());
+
 		}
+		
+		
+		return response;
 	}
 
-	public static void PostReqest() throws IOException, MalformedURLException {
-		String PostParams = "[{ \"time\": 1562514130" + "\"value\": 42.3" ;
-		URL dataURL = new URL("https://g9eyv3jby5.execute-api.us-east-1.amazonaws.com/Prod/data");
-		try {
-			HttpURLConnection postConnecton = (HttpURLConnection) dataURL.openConnection();
-			postConnecton.setRequestMethod("POST");
-			postConnecton.setRequestProperty("Data: " ,PostParams);
-			OutputStream out = postConnecton.getOutputStream();
-		    out.write(PostParams.getBytes());
-		    out.flush();
-		    out.close();
-		    int responseCode = postConnecton.getResponseCode();
-		    System.out.println("Post response code " + responseCode);
-		    System.out.println("Post reponse message" + postConnecton.getResponseMessage());
-		    if(responseCode == HttpURLConnection.HTTP_CREATED) {
-		    	BufferedReader in = new BufferedReader(new InputStreamReader(postConnecton.getInputStream()));
-		    	String inputLine;
-		    	StringBuffer response = new StringBuffer();
-		    	while((inputLine = in.readLine())!=null) {
-		    		in.close();
-		    	}
-		    System.out.println("Response" + response.toString());
-		    }
-		    else if(responseCode == HttpURLConnection.HTTP_BAD_GATEWAY) {
-		    System.out.println("Error in post request : BAD GATEWAY");
-		    }
-		    else if(responseCode == HttpURLConnection.HTTP_BAD_METHOD) {
-		    	System.out.println("Error in post request : bad metod");
-		    }
-		    else if (responseCode == HttpURLConnection.HTTP_BAD_REQUEST) {
-		    	System.out.println("Error in post request : bad request");
-		    }
-		}
-		    catch(MalformedURLException e) {
-		    }
-	}
 }
+
