@@ -5,7 +5,7 @@ Description: >
     SAM Template for tusc-sample app
 Globals:
   Function:
-    Timeout: 5
+    Timeout: 30
     
 Resources:
 
